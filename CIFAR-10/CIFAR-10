@@ -1,0 +1,116 @@
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report
+# Load CIFAR-10
+(x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+
+print("Train shape:", x_train.shape, y_train.shape)
+print("Test shape:", x_test.shape, y_test.shape)
+def remove_nulls(x, y):
+    mask = ~np.isnan(x).any(axis=(1,2,3))
+    return x[mask], y[mask]
+
+x_train, y_train = remove_nulls(x_train, y_train)
+x_test, y_test = remove_nulls(x_test, y_test)
+x_train = x_train.astype("float32") / 255.0
+x_test = x_test.astype("float32") / 255.0
+
+mean = np.mean(x_train, axis=(0,1,2))
+std = np.std(x_train, axis=(0,1,2))
+
+x_train = (x_train - mean) / std
+x_test = (x_test - mean) / std
+num_classes = 10
+y_train = tf.keras.utils.to_categorical(y_train, num_classes)
+y_test = tf.keras.utils.to_categorical(y_test, num_classes)
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D
+from tensorflow.keras.layers import Flatten, Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+model = Sequential()
+
+# Block 1
+model.add(Conv2D(64, (3,3), activation='relu', padding='same', input_shape=(32,32,3)))
+model.add(Conv2D(64, (3,3), activation='relu', padding='same'))
+model.add(MaxPooling2D((2,2)))
+
+# Block 2
+model.add(Conv2D(128, (3,3), activation='relu', padding='same'))
+model.add(Conv2D(128, (3,3), activation='relu', padding='same'))
+model.add(MaxPooling2D((2,2)))
+
+# Block 3
+model.add(Conv2D(256, (3,3), activation='relu', padding='same'))
+model.add(Conv2D(256, (3,3), activation='relu', padding='same'))
+model.add(Conv2D(256, (3,3), activation='relu', padding='same'))
+model.add(MaxPooling2D((2,2)))
+
+# Block 4
+model.add(Conv2D(512, (3,3), activation='relu', padding='same'))
+model.add(Conv2D(512, (3,3), activation='relu', padding='same'))
+model.add(Conv2D(512, (3,3), activation='relu', padding='same'))
+model.add(MaxPooling2D((2,2)))
+
+# Classifier
+model.add(Flatten())
+model.add(Dense(4096, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(4096, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(10, activation='softmax'))
+x_train, x_val, y_train, y_val = train_test_split(
+    x_train, y_train, test_size=0.1, random_state=42
+)
+model.compile(
+    optimizer=Adam(learning_rate=0.0001),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+model.summary()
+history = model.fit(
+    x_train, y_train,
+    epochs=15,
+    batch_size=64,
+    validation_data=(x_val, y_val)
+)
+plt.figure(figsize=(12,5))
+
+# Accuracy
+plt.subplot(1,2,1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.title('Accuracy Curve')
+
+# Loss
+plt.subplot(1,2,2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Val Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.title('Loss Curve')
+
+plt.show()
+test_loss, test_accuracy = model.evaluate(x_test, y_test)
+print("Test Accuracy:", test_accuracy)
+print("Test Loss:", test_loss)
+y_pred = model.predict(x_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+y_true = np.argmax(y_test, axis=1)
+
+cm = confusion_matrix(y_true, y_pred_classes)
+plt.figure(figsize=(10,8))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+plt.xlabel("Predicted")
+plt.ylabel("True")
+plt.title("Confusion Matrix")
+plt.show()
+print(classification_report(y_true, y_pred_classes))
